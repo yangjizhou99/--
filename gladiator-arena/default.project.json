@@ -5,16 +5,14 @@
 
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "RoundTimer": { "$className": "RemoteEvent" }
+      "RoundTimer": { "$className": "RemoteEvent" },
+      "SwordAttack": { "$className": "RemoteEvent" }
     },
 
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "RoundManager": {
         "$path": "src/server/RoundManager.server.luau"
-      },
-      "TestServer": {
-        "$path": "src/server/TestServer.server.luau"
       }
     },
 
@@ -22,11 +20,8 @@
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "Timer": {
-          "$path": "src/client/Timer.client.luau"
-        },
-        "TestClient": {
-          "$path": "src/client/TestClient.client.luau"
+        "ClientMain": {
+          "$path": "src/client/ClientMain.client.luau"
         }
       }
     }
