@@ -8,8 +8,16 @@ local chooseEvent  = ReplicatedStorage:WaitForChild("WeaponChoose")
 local attackEvent  = ReplicatedStorage:WaitForChild("WeaponAttack")
 local combatFX    = ReplicatedStorage:WaitForChild("CombatFX")
 
--- ===== 视觉/镜头工具函数 =====
+-- [ADD] 状态与冷却表
+local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+
+local currentPhase = "WAITING"
+local currentWeapon = "sword"  -- 根据已装备的 Tool 自动更新
+local COOLDOWN = { Sword = 0.5, Hammer = 1.0, Bow = 0.8 }
+local cooldownUntil = 0
+
+-- ===== 视觉/镜头工具函数 =====
 
 local function cameraShake(mag: number, dur: number)
 	local cam = workspace.CurrentCamera
@@ -182,19 +190,83 @@ attackHint.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 attackHint.Visible = false
 attackHint.Parent = gui
 
+-- [ADD] 冷却条（底部）
+local cdBar = Instance.new("Frame")
+cdBar.Name = "CooldownBar"
+cdBar.AnchorPoint = Vector2.new(0.5, 1)
+cdBar.Position = UDim2.fromScale(0.5, 0.98)
+cdBar.Size = UDim2.fromOffset(240, 8)
+cdBar.BackgroundColor3 = Color3.fromRGB(60,60,60)
+cdBar.BorderSizePixel = 0
+cdBar.Visible = false
+cdBar.Parent = gui
+
+local cdFill = Instance.new("Frame")
+cdFill.Name = "Fill"
+cdFill.Size = UDim2.fromScale(0, 1)
+cdFill.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+cdFill.BorderSizePixel = 0
+cdFill.Parent = cdBar
+
+local function startCooldown(sec)
+	cooldownUntil = os.clock() + sec
+	cdBar.Visible = true
+	while os.clock() < cooldownUntil do
+		local left = math.max(cooldownUntil - os.clock(), 0)
+		local ratio = 1 - left / sec  -- 从 0 → 1
+		cdFill.Size = UDim2.fromScale(ratio, 1)
+		task.wait()
+	end
+	cdBar.Visible = false
+	cdFill.Size = UDim2.fromScale(0, 1)
+end
+
+-- [ADD] 蓄力条（弓，底部上方）
+local chargeBar = Instance.new("Frame")
+chargeBar.Name = "ChargeBar"
+chargeBar.AnchorPoint = Vector2.new(0.5, 1)
+chargeBar.Position = UDim2.fromScale(0.5, 0.92)
+chargeBar.Size = UDim2.fromOffset(240, 6)
+chargeBar.BackgroundColor3 = Color3.fromRGB(40,40,40)
+chargeBar.BorderSizePixel = 0
+chargeBar.Visible = false
+chargeBar.Parent = gui
+
+local cfill = Instance.new("Frame")
+cfill.Name = "Fill"
+cfill.Size = UDim2.fromScale(0, 1)
+cfill.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
+cfill.BorderSizePixel = 0
+cfill.Parent = chargeBar
+
+-- [ADD] 准星（弓装备 & 战斗中才显示）
+local cross = Instance.new("Frame")
+cross.Name = "Crosshair"
+cross.AnchorPoint = Vector2.new(0.5, 0.5)
+cross.Position = UDim2.fromScale(0.5, 0.5)
+cross.Size = UDim2.fromOffset(10, 10)
+cross.BackgroundTransparency = 1
+cross.Visible = false
+cross.Parent = gui
+local vLine = Instance.new("Frame"); vLine.Size = UDim2.fromOffset(2,16); vLine.AnchorPoint = Vector2.new(0.5,0.5); vLine.Position = UDim2.fromScale(0.5,0.5); vLine.BackgroundColor3 = Color3.new(1,1,1); vLine.Parent = cross
+local hLine = Instance.new("Frame"); hLine.Size = UDim2.fromOffset(16,2); hLine.AnchorPoint = Vector2.new(0.5,0.5); hLine.Position = UDim2.fromScale(0.5,0.5); hLine.BackgroundColor3 = Color3.new(1,1,1); hLine.Parent = cross
+
 -- 切换 UI（由服务器广播阶段）
 timerEvent.OnClientEvent:Connect(function(data)
 	local p = data.phase or "WAITING"
 	local s = tonumber(data.secs) or 0
-	label.Text = string.format("%s：%ds", phaseText[p] or p, s)
-	picker.Visible = (p == "WAITING")
-	attackHint.Visible = (p == "COMBAT") -- 战斗阶段显示攻击提示
+	-- [MODIFY] 保存阶段 + 控制准星显示
+	currentPhase = data.phase or "WAITING"
+	label.Text = string.format("%s：%ds", phaseText[currentPhase] or currentPhase, tonumber(data.secs) or 0)
+	picker.Visible = (currentPhase == "WAITING")
+	attackHint.Visible = (currentPhase == "COMBAT") -- 战斗阶段显示攻击提示
+	cross.Visible = (currentPhase == "COMBAT" and currentWeapon == "bow")
 end)
 
 -- ========== 客户端发起攻击（按键 + Tool.Activated），服务端再做校验与判定 ==========
 local UserInputService = game:GetService("UserInputService")
-local currentWeapon = nil
 
+-- [REPLACE] hookTool
 local function hookTool(tool: Instance)
 	if not tool:IsA("Tool") then return end
 	local name = tool.Name
@@ -203,27 +275,82 @@ local function hookTool(tool: Instance)
 	print("绑定武器:", name) -- 调试信息
 	ensureTrail(tool)
 
-	-- 当装备武器时，设置为当前武器
+	-- 装备/卸下时记录当前武器 & 准星
 	tool.Equipped:Connect(function()
-		currentWeapon = tool
+		currentWeapon = (name == "Bow") and "bow" or string.lower(name)
+		cross.Visible = (currentPhase == "COMBAT" and currentWeapon == "bow")
 		print("装备武器:", name)
 	end)
-	
 	tool.Unequipped:Connect(function()
-		if currentWeapon == tool then
-			currentWeapon = nil
-			print("卸下武器:", name)
-		end
+		if currentWeapon == "bow" then cross.Visible = false end
+		print("卸下武器:", name)
 	end)
 
-	-- 保留原有的点击攻击功能
-	tool.Activated:Connect(function()
-		print("武器被激活:", name) -- 调试信息
-		performAttack(name)
+	if name ~= "Bow" then
+		-- 近战：点击即挥击 + 开启 Trail + 客户端冷却条
+		tool.Activated:Connect(function()
+			print("武器被激活:", name) -- 调试信息
+			-- 手感（已存在的摄像机抖动/Trail 逻辑保持不变）…
+			cameraShake(0.15, 0.08)
+			local tr = tool:FindFirstChild("Handle") and tool.Handle:FindFirstChild("BladeTrail")
+			if tr then
+				tr.Enabled = true
+				task.delay(0.18, function() if tr then tr.Enabled = false end end)
+			end
+			attackEvent:FireServer({ action = "swing" })
+			startCooldown(COOLDOWN[name] or 0.6)
+		end)
+		return
+	end
+
+	-- 弓：按住→蓄力，松开→发射（charge ∈ [0,1]）
+	local holding = false
+	local holdConnA, holdConnB
+
+	tool.Equipped:Connect(function()
+		-- 监听鼠标/触摸
+		holdConnA = UIS.InputBegan:Connect(function(input, gp)
+			if gp then return end
+			if currentPhase ~= "COMBAT" or currentWeapon ~= "bow" then return end
+			if os.clock() < cooldownUntil then return end
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+			if holding then return end
+			holding = true
+			local t0 = os.clock()
+			chargeBar.Visible = true
+			-- 蓄力上限时间（0.6s）
+			while holding do
+				local a = math.clamp((os.clock() - t0) / 0.6, 0, 1)
+				cfill.Size = UDim2.fromScale(a, 1)
+				task.wait()
+			end
+		end)
+
+		holdConnB = UIS.InputEnded:Connect(function(input, gp)
+			if gp then return end
+			if not holding then return end
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+			-- 结束蓄力 → 发射
+			local a = cfill.Size.X.Scale  -- 0..1
+			holding = false
+			chargeBar.Visible = false
+			cfill.Size = UDim2.fromScale(0, 1)
+
+			attackEvent:FireServer({ action = "shoot", charge = a })
+			startCooldown(COOLDOWN.Bow or 0.8)
+		end)
+	end)
+
+	tool.Unequipped:Connect(function()
+		holding = false
+		chargeBar.Visible = false
+		cfill.Size = UDim2.fromScale(0, 1)
+		if holdConnA then holdConnA:Disconnect() end
+		if holdConnB then holdConnB:Disconnect() end
 	end)
 end
 
--- 统一的攻击函数
+-- 统一的攻击函数（用于F键攻击）
 local function performAttack(weaponName)
 	if not weaponName then return end
 	
@@ -296,6 +423,16 @@ combatFX.OnClientEvent:Connect(function(msg)
 				pe.Parent = workspace.Terrain
 				pe:Emit(12)
 				task.delay(0.3, function() pe:Destroy() end)
+			end
+		end
+		
+		-- [ADD] 弓命中时的准星闪烁
+		if currentWeapon == "bow" and cross.Visible then
+			for _, line in ipairs(cross:GetChildren()) do
+				if line:IsA("Frame") then
+					line.BackgroundColor3 = Color3.fromRGB(255, 220, 0)
+					TweenService:Create(line, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(255,255,255)}):Play()
+				end
 			end
 		end
 	elseif msg.type == "gotHit" then

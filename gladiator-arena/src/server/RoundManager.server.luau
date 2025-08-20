@@ -358,7 +358,8 @@ local function doMelee(attacker: Player, meta)
 	return hits
 end
 
-local function doRanged(attacker: Player, meta)
+-- [REPLACE] doRanged 支持 overrideDamage
+local function doRanged(attacker: Player, meta, overrideDamage)
 	local char = attacker.Character; if not char then return {} end
 	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return {} end
 
@@ -374,8 +375,9 @@ local function doRanged(attacker: Player, meta)
 		if m then
 			local hum = m:FindFirstChildOfClass("Humanoid")
 			if hum and hum.Health > 0 then
-				hum:TakeDamage(meta.damage)
-				return { {hum = hum, pos = result.Position} }
+				local dmg = overrideDamage or meta.damage
+				hum:TakeDamage(dmg)
+				return { { hum = hum, pos = result.Position, damage = dmg } }
 			end
 		end
 	end
@@ -400,6 +402,17 @@ AttackEvent.OnServerEvent:Connect(function(p: Player, payload)
 		return 
 	end
 
+	-- [MODIFY] 读取弓的蓄力（0..1），并按 50%~100% 线性缩放伤害
+	local charge = 0
+	if typeof(payload) == "table" and typeof(payload.charge) == "number" then
+		charge = math.clamp(payload.charge, 0, 1)
+	end
+
+	local overrideDamage = nil
+	if key == "bow" then
+		overrideDamage = math.max(10, math.floor(meta.damage * (0.5 + 0.5 * charge)))
+	end
+
 	-- 冷却
 	local now = os.clock()
 	if (now - (lastAttackAt[p.UserId] or 0)) < meta.cooldown then 
@@ -408,14 +421,14 @@ AttackEvent.OnServerEvent:Connect(function(p: Player, payload)
 	end
 	lastAttackAt[p.UserId] = now
 
-	print("执行攻击，武器:", key, "类型:", meta.kind) -- 调试信息
+	print("执行攻击，武器:", key, "类型:", meta.kind, "蓄力:", charge) -- 调试信息
 
 	-- 命中计算
 	local hits
 	if meta.kind == "melee" then
-		hits = doMelee(p, meta)
+		hits = doMelee(p, meta)               -- 近战保持不变
 	else
-		hits = doRanged(p, meta)
+		hits = doRanged(p, meta, overrideDamage)  -- [MODIFY] 传入 overrideDamage
 	end
 
 	print("命中数量:", #hits) -- 调试信息
@@ -441,7 +454,9 @@ AttackEvent.OnServerEvent:Connect(function(p: Player, payload)
 		-- 如果是玩家，给其客户端发受击提示
 		for _, pl in ipairs(Players:GetPlayers()) do
 			if pl.Character == model then
-				ReplicatedStorage.CombatFX:FireClient(pl, { type = "gotHit", damage = meta.damage })
+				-- [MODIFY] 如果 hits 元素里带 damage，则用它；否则用 meta.damage
+				local dmgToSend = (h and h.damage) or meta.damage
+				ReplicatedStorage.CombatFX:FireClient(pl, { type = "gotHit", damage = dmgToSend })
 				break
 			end
 		end
