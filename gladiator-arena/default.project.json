@@ -3,12 +3,13 @@
   "tree": {
     "$className": "DataModel",
 
-    "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
-      "RoundTimer":    { "$className": "RemoteEvent" },
-      "WeaponChoose":  { "$className": "RemoteEvent" },
-      "WeaponAttack":  { "$className": "RemoteEvent" }
-    },
+               "ReplicatedStorage": {
+             "$className": "ReplicatedStorage",
+             "RoundTimer":    { "$className": "RemoteEvent" },
+             "WeaponChoose":  { "$className": "RemoteEvent" },
+             "WeaponAttack":  { "$className": "RemoteEvent" },
+             "CombatFX":      { "$className": "RemoteEvent" }
+           },
 
     "ServerScriptService": {
       "$className": "ServerScriptService",

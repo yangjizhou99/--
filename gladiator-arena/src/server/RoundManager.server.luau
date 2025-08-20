@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PREP_TIME   = 10
 local COMBAT_TIME = 60
 local RESET_TIME  = 6
+local BOT_ENABLED = true  -- 是否启用机器人
 
 -- 近战/远程参数
 local WEAPON_META = {
@@ -139,10 +140,198 @@ local function giveChosenWeapon(p: Player, key: string)
 	tool.Parent = p.Backpack
 end
 
+-- ====== 机器人系统 ======
+local botModel = nil
+local botHumanoid = nil
+local botHRP = nil
+
+local function createBot()
+	if botModel then botModel:Destroy() end
+	
+	-- 创建机器人模型
+	botModel = Instance.new("Model")
+	botModel.Name = "CombatBot"
+	botModel.Parent = workspace
+	
+	-- 创建身体部件
+	local torso = Instance.new("Part")
+	torso.Name = "Torso"
+	torso.Size = Vector3.new(2, 2, 1)
+	torso.BrickColor = BrickColor.new("Really red")
+	torso.Material = Enum.Material.Plastic
+	torso.Parent = botModel
+	
+	local head = Instance.new("Part")
+	head.Name = "Head"
+	head.Size = Vector3.new(1.2, 1.2, 1.2)
+	head.BrickColor = BrickColor.new("Really red")
+	head.Material = Enum.Material.Plastic
+	head.Parent = botModel
+	
+	local leftArm = Instance.new("Part")
+	leftArm.Name = "LeftArm"
+	leftArm.Size = Vector3.new(1, 2, 1)
+	leftArm.BrickColor = BrickColor.new("Really red")
+	leftArm.Material = Enum.Material.Plastic
+	leftArm.Parent = botModel
+	
+	local rightArm = Instance.new("Part")
+	rightArm.Name = "RightArm"
+	rightArm.Size = Vector3.new(1, 2, 1)
+	rightArm.BrickColor = BrickColor.new("Really red")
+	rightArm.Material = Enum.Material.Plastic
+	rightArm.Parent = botModel
+	
+	local leftLeg = Instance.new("Part")
+	leftLeg.Name = "LeftLeg"
+	leftLeg.Size = Vector3.new(1, 2, 1)
+	leftLeg.BrickColor = BrickColor.new("Really red")
+	leftLeg.Material = Enum.Material.Plastic
+	leftLeg.Parent = botModel
+	
+	local rightLeg = Instance.new("Part")
+	rightLeg.Name = "RightLeg"
+	rightLeg.Size = Vector3.new(1, 2, 1)
+	rightLeg.BrickColor = BrickColor.new("Really red")
+	rightLeg.Material = Enum.Material.Plastic
+	rightLeg.Parent = botModel
+	
+	-- 创建 HumanoidRootPart
+	botHRP = Instance.new("Part")
+	botHRP.Name = "HumanoidRootPart"
+	botHRP.Size = Vector3.new(2, 2, 1)
+	botHRP.Transparency = 1
+	botHRP.CanCollide = false
+	botHRP.Parent = botModel
+	
+	-- 创建 Humanoid
+	botHumanoid = Instance.new("Humanoid")
+	botHumanoid.MaxHealth = 100
+	botHumanoid.Health = 100
+	botHumanoid.WalkSpeed = 16
+	botHumanoid.Parent = botModel
+	
+	-- 设置身体部件位置
+	local weld = Instance.new("Weld")
+	weld.Part0 = botHRP
+	weld.Part1 = torso
+	weld.C0 = CFrame.new(0, 0, 0)
+	weld.Parent = botHRP
+	
+	local headWeld = Instance.new("Weld")
+	headWeld.Part0 = torso
+	headWeld.Part1 = head
+	headWeld.C0 = CFrame.new(0, 1.5, 0)
+	headWeld.Parent = torso
+	
+	local leftArmWeld = Instance.new("Weld")
+	leftArmWeld.Part0 = torso
+	leftArmWeld.Part1 = leftArm
+	leftArmWeld.C0 = CFrame.new(-1.5, 0, 0)
+	leftArmWeld.Parent = torso
+	
+	local rightArmWeld = Instance.new("Weld")
+	rightArmWeld.Part0 = torso
+	rightArmWeld.Part1 = rightArm
+	rightArmWeld.C0 = CFrame.new(1.5, 0, 0)
+	rightArmWeld.Parent = torso
+	
+	local leftLegWeld = Instance.new("Weld")
+	leftLegWeld.Part0 = torso
+	leftLegWeld.Part1 = leftLeg
+	leftLegWeld.C0 = CFrame.new(-0.5, -2, 0)
+	leftLegWeld.Parent = torso
+	
+	local rightLegWeld = Instance.new("Weld")
+	rightLegWeld.Part0 = torso
+	rightLegWeld.Part1 = rightLeg
+	rightLegWeld.C0 = CFrame.new(0.5, -2, 0)
+	rightLegWeld.Parent = torso
+	
+	-- 给机器人武器
+	local botTool = makeTool_Sword()
+	botTool.Parent = botModel
+	
+	return botModel
+end
+
+local function moveBotToPosition(pos: Vector3)
+	if botHRP then
+		botHRP.CFrame = CFrame.new(pos)
+	end
+end
+
+local function botAttack()
+	if not botModel or not botHumanoid or botHumanoid.Health <= 0 then return end
+	
+	-- 找到最近的玩家
+	local nearestPlayer = nil
+	local nearestDistance = math.huge
+	
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character and player:GetAttribute(inRoundAttr) then
+			local playerHRP = player.Character:FindFirstChild("HumanoidRootPart")
+			if playerHRP then
+				local distance = (playerHRP.Position - botHRP.Position).Magnitude
+				if distance < nearestDistance and distance < 20 then
+					nearestDistance = distance
+					nearestPlayer = player
+				end
+			end
+		end
+	end
+	
+	if nearestPlayer and nearestPlayer.Character then
+		local playerHRP = nearestPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if playerHRP then
+			-- 面向玩家
+			botHRP.CFrame = CFrame.lookAt(botHRP.Position, playerHRP.Position)
+			
+			-- 模拟攻击
+			local fakePlayer = {
+				Character = botModel,
+				UserId = 999999,
+				GetAttribute = function() return true end
+			}
+			
+			-- 使用刀进行攻击
+			local meta = WEAPON_META.sword
+			local hits = {}
+			local success, result = pcall(function()
+				return doMelee(fakePlayer, meta)
+			end)
+			if success then
+				hits = result
+			else
+				print("机器人攻击错误:", result)
+			end
+			
+			-- 发送攻击特效给所有玩家
+			local points = {}
+			for _, h in ipairs(hits) do 
+				table.insert(points, h.pos)
+				-- 给被攻击的玩家发送受击效果
+				for _, pl in ipairs(Players:GetPlayers()) do
+					if pl.Character == h.hum.Parent then
+						ReplicatedStorage.CombatFX:FireClient(pl, { type = "gotHit", damage = meta.damage })
+						break
+					end
+				end
+			end
+			
+			-- 给机器人发送命中确认
+			for _, pl in ipairs(Players:GetPlayers()) do
+				ReplicatedStorage.CombatFX:FireClient(pl, { type = "hitConfirm", points = points })
+			end
+		end
+	end
+end
+
 -- ====== 服务器攻击判定 ======
+-- 返回 { {hum=Humanoid, pos=Vector3} , ... }
 local function doMelee(attacker: Player, meta)
-	local char = attacker.Character; if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+	local char = attacker.Character; if not char then return {} end
+	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return {} end
 
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -154,17 +343,25 @@ local function doMelee(attacker: Player, meta)
 		local m = part:FindFirstAncestorOfClass("Model")
 		if m and m ~= char then
 			local hum = m:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then victims[hum] = true end
+			local hhrp = m:FindFirstChild("HumanoidRootPart")
+			if hum and hhrp and hum.Health > 0 then
+				victims[hum] = hhrp.Position
+			end
 		end
 	end
-	for hum, _ in pairs(victims) do hum:TakeDamage(meta.damage) end
+
+	local hits = {}
+	for hum, pos in pairs(victims) do
+		hum:TakeDamage(meta.damage)
+		table.insert(hits, {hum = hum, pos = pos})
+	end
+	return hits
 end
 
 local function doRanged(attacker: Player, meta)
-	local char = attacker.Character; if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+	local char = attacker.Character; if not char then return {} end
+	local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return {} end
 
-	-- 从胸口沿角色朝向做射线
 	local origin = hrp.Position + Vector3.new(0, 1.5, 0)
 	local dir = hrp.CFrame.LookVector * meta.range
 	local params = RaycastParams.new()
@@ -176,28 +373,78 @@ local function doRanged(attacker: Player, meta)
 		local m = result.Instance:FindFirstAncestorOfClass("Model")
 		if m then
 			local hum = m:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then hum:TakeDamage(meta.damage) end
+			if hum and hum.Health > 0 then
+				hum:TakeDamage(meta.damage)
+				return { {hum = hum, pos = result.Position} }
+			end
 		end
 	end
+	return {}
 end
 
 AttackEvent.OnServerEvent:Connect(function(p: Player, payload)
-	-- 仅在战斗阶段、且为本回合参赛者才允许攻击
-	if Phase ~= "COMBAT" or not p:GetAttribute(inRoundAttr) then return end
-	if typeof(payload) ~= "table" then return end
+	print("收到攻击事件，玩家:", p.Name, "阶段:", Phase, "在回合中:", p:GetAttribute(inRoundAttr)) -- 调试信息
+	
+	if Phase ~= "COMBAT" or not p:GetAttribute(inRoundAttr) then 
+		print("攻击被拒绝：阶段或状态不正确") -- 调试信息
+		return 
+	end
+	if typeof(payload) ~= "table" then 
+		print("攻击被拒绝：payload不是table") -- 调试信息
+		return 
+	end
 
 	local key = selectedWeapon[p.UserId] or "sword"
-	local meta = WEAPON_META[key]; if not meta then return end
+	local meta = WEAPON_META[key]; if not meta then 
+		print("攻击被拒绝：无效武器类型") -- 调试信息
+		return 
+	end
 
 	-- 冷却
 	local now = os.clock()
-	if (now - (lastAttackAt[p.UserId] or 0)) < meta.cooldown then return end
+	if (now - (lastAttackAt[p.UserId] or 0)) < meta.cooldown then 
+		print("攻击被拒绝：冷却中") -- 调试信息
+		return 
+	end
 	lastAttackAt[p.UserId] = now
 
+	print("执行攻击，武器:", key, "类型:", meta.kind) -- 调试信息
+
+	-- 命中计算
+	local hits
 	if meta.kind == "melee" then
-		doMelee(p, meta)
+		hits = doMelee(p, meta)
 	else
-		doRanged(p, meta)
+		hits = doRanged(p, meta)
+	end
+
+	print("命中数量:", #hits) -- 调试信息
+
+	-- 回传给攻击者：命中确认 + 命中点集合（用于粒子/镜头）
+	local points = {}
+	for _, h in ipairs(hits) do table.insert(points, h.pos) end
+	ReplicatedStorage.CombatFX:FireClient(p, { type = "hitConfirm", points = points })
+
+	-- 对每个受击者：轻微击退 + 受击提示
+	local attackerHRP = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+	for _, h in ipairs(hits) do
+		local hum = h.hum
+		local model = hum and hum.Parent
+		local hrp = model and model:FindFirstChild("HumanoidRootPart")
+		if attackerHRP and hrp then
+			local dir = (hrp.Position - attackerHRP.Position)
+			local u = (dir.Magnitude > 0) and dir.Unit or Vector3.new(0,1,0)
+			-- 轻微击退：按质量给个冲量
+			local impulse = u * (hrp.AssemblyMass * 30)
+			hrp:ApplyImpulse(impulse)
+		end
+		-- 如果是玩家，给其客户端发受击提示
+		for _, pl in ipairs(Players:GetPlayers()) do
+			if pl.Character == model then
+				ReplicatedStorage.CombatFX:FireClient(pl, { type = "gotHit", damage = meta.damage })
+				break
+			end
+		end
 	end
 end)
 
@@ -232,6 +479,12 @@ local function aliveCount()
 			end
 		end
 	end
+	
+	-- 计算机器人
+	if botHumanoid and botHumanoid.Health > 0 then
+		n += 1
+	end
+	
 	return n
 end
 
@@ -306,10 +559,25 @@ task.spawn(function()
 				lastAttackAt[p.UserId] = 0
 			end
 		end
+		
+		-- 创建机器人（如果启用且玩家数量少于2）
+		if BOT_ENABLED and #Players:GetPlayers() < 2 then
+			createBot()
+			if botModel then
+				moveBotToPosition(Vector3.new(10, 6, 10)) -- 机器人出生位置
+				print("机器人已创建")
+			end
+		end
 		for t = COMBAT_TIME, 0, -1 do
 			local alive = aliveCount()
 			print("战斗倒计时:", t, "存活:", alive)
 			broadcast("COMBAT", t)
+			
+			-- 机器人攻击循环
+			if botModel and botHumanoid and botHumanoid.Health > 0 then
+				botAttack()
+			end
+			
 			if alive <= 0 then 
 				print("战斗结束，没有存活玩家")
 				break 
@@ -320,6 +588,16 @@ task.spawn(function()
 		-- 结算：关门、回笼子、清参赛标记
 		Phase = "RESET"
 		setGates(false)
+		
+		-- 清理机器人
+		if botModel then
+			botModel:Destroy()
+			botModel = nil
+			botHumanoid = nil
+			botHRP = nil
+			print("机器人已清理")
+		end
+		
 		local cagePos3 = select(1, getSpawnPositions())
 		for _, p in ipairs(Players:GetPlayers()) do
 			p:SetAttribute(inRoundAttr, false)
