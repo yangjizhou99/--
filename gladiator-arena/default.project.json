@@ -1,0 +1,34 @@
+{
+  "name": "GladiatorArena",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "RoundTimer": { "$className": "RemoteEvent" }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "RoundManager": {
+        "$path": "src/server/RoundManager.server.luau"
+      },
+      "TestServer": {
+        "$path": "src/server/TestServer.server.luau"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Timer": {
+          "$path": "src/client/Timer.client.luau"
+        },
+        "TestClient": {
+          "$path": "src/client/TestClient.client.luau"
+        }
+      }
+    }
+  }
+}
